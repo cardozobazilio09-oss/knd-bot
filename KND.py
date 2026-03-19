@@ -1,14 +1,14 @@
 import requests
-from io import BytesIO
-from selenium import webdriver
-from selenium.webdriver.chrome.service import Service
-from webdriver_manager.chrome import ChromeDriverManager
 import time
 from bs4 import BeautifulSoup
 import json
+from io import BytesIO
 
 BOT_TOKEN = "8278630418:AAG3g7XDj71c55MbXitY2W-sM4GXGZDmd4g"
 CHAT_ID = "855908755"
+
+URL = "https://www.karzanddolls.com/details/mini+gt+/mini-gt/MTY1"
+
 
 def send_telegram(product, alert_type):
     message = f"""🚨 {alert_type}
@@ -23,49 +23,25 @@ def send_telegram(product, alert_type):
 
     try:
         if product["image"]:
-            # 🔥 DOWNLOAD IMAGE FIRST
             img_response = requests.get(product["image"])
-
             if img_response.status_code == 200:
                 image_file = BytesIO(img_response.content)
 
                 url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendPhoto"
+                data = {"chat_id": CHAT_ID, "caption": message}
+                files = {"photo": ("image.jpg", image_file)}
 
-                data = {
-                    "chat_id": CHAT_ID,
-                    "caption": message
-                }
-
-                files = {
-                    "photo": ("image.jpg", image_file)
-                }
-
-                response = requests.post(url, data=data, files=files)
-                print("Photo sent:", response.text)
-
+                requests.post(url, data=data, files=files)
             else:
                 raise Exception("Image download failed")
-
         else:
             raise Exception("No image")
 
-    except Exception as e:
-        print("Image failed:", e)
-
-        # 🔥 FALLBACK TO TEXT
+    except:
         url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+        data = {"chat_id": CHAT_ID, "text": message}
+        requests.post(url, data=data)
 
-        data = {
-            "chat_id": CHAT_ID,
-            "text": message
-        }
-
-        response = requests.post(url, data=data)
-        print("Text sent:", response.text)
-
-URL = "https://www.karzanddolls.com/details/mini+gt+/mini-gt/MTY1"
-
-driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()))
 
 # ✅ LOAD OLD DATA
 try:
@@ -77,11 +53,12 @@ except:
 while True:
     print("Checking...")
 
-    driver.get(URL)
-    time.sleep(6)
+    headers = {
+        "User-Agent": "Mozilla/5.0"
+    }
 
-    html = driver.page_source
-    soup = BeautifulSoup(html, "html.parser")
+    response = requests.get(URL, headers=headers)
+    soup = BeautifulSoup(response.text, "html.parser")
 
     cards = soup.select("a[href*='/product/']")
 
@@ -91,21 +68,12 @@ while True:
         try:
             parent = card.parent
 
-            # ✅ LINK
-            from urllib.parse import quote
-
             link = card.get("href")
-
             if not link.startswith("http"):
                 link = "https://www.karzanddolls.com" + link
 
-            # 🔥 FIX SPECIAL CHARACTERS
-                link = quote(link, safe=":/?=&")
-
-            # ✅ NAME
             name = link.split("/product/mini-gt/")[1].split("/")[0].replace("-", " ").upper()
 
-            # ✅ PRICE
             text = parent.get_text("\n")
             lines = [l.strip() for l in text.split("\n") if l.strip()]
 
@@ -115,7 +83,6 @@ while True:
                     price = line
                     break
 
-            # ✅ QUANTITY
             qty_element = parent.select_one(".add-top-size li[data-qty]")
 
             quantity = None
@@ -127,7 +94,6 @@ while True:
                     quantity = int(qty_str)
                     stock = quantity > 0
 
-            # ✅ IMAGE FIX (lazy loading handled)
             img_tag = parent.select_one("img")
 
             image = None
@@ -137,7 +103,6 @@ while True:
             if image and image.startswith("/"):
                 image = "https://www.karzanddolls.com" + image
 
-            # ✅ PRODUCT OBJECT
             product = {
                 "name": name,
                 "price": price,
@@ -146,25 +111,20 @@ while True:
                 "link": link,
                 "image": image
             }
-            send_telegram(product, "TEST")
 
             new_data[name] = product
 
-            # 🆕 NEW PRODUCT
             if name not in old_data:
                 send_telegram(product, "NEW LISTING")
 
-            # 🔥 RESTOCK
             elif old_data[name]["in_stock"] == False and stock == True:
                 send_telegram(product, "RESTOCK")
 
-        except Exception as e:
-            print("Error:", e)
+        except:
             continue
 
     old_data = new_data
 
-    # ✅ SAVE DATA
     with open("data.json", "w") as f:
         json.dump(old_data, f)
 
