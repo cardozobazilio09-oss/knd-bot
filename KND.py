@@ -50,6 +50,8 @@ try:
 except:
     old_data = {}
 
+first_run = True
+
 while True:
     print("Checking...")
 
@@ -114,16 +116,26 @@ while True:
 
             new_data[name] = product
 
-            if name not in old_data:
+            # 🧠 FIRST RUN (DON'T SEND ANYTHING)
+            if not old_data:
+                pass
+
+            # 🆕 NEW PRODUCT
+            elif name not in old_data:
                 send_telegram(product, "NEW LISTING")
 
+            # 🔥 RESTOCK
             elif old_data[name]["in_stock"] == False and stock == True:
-                send_telegram(product, "RESTOCK")
+            send_telegram(product, "RESTOCK")
 
         except:
             continue
 
     old_data = new_data
+
+    # ✅ After first cycle, allow alerts
+    if first_run:
+        first_run = False
 
     with open("data.json", "w") as f:
         json.dump(old_data, f)
