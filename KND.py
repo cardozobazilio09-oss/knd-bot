@@ -126,7 +126,7 @@ while True:
 
             # 🔥 RESTOCK
             elif old_data[name]["in_stock"] == False and stock == True:
-            send_telegram(product, "RESTOCK")
+                send_telegram(product, "RESTOCK")
 
         except:
             continue
