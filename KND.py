@@ -4,6 +4,7 @@ from bs4 import BeautifulSoup
 import json
 from io import BytesIO
 from datetime import datetime
+import pytz
 
 BOT_TOKEN = "8278630418:AAG3g7XDj71c55MbXitY2W-sM4GXGZDmd4g"
 CHAT_ID = "855908755"
@@ -54,7 +55,8 @@ except:
 first_run = True
 
 while True:
-    now = datetime.now()
+    ist = pytz.timezone("Asia/Kolkata")
+    now = datetime.now(ist)
     current_hour = now.hour
 
     # RUN ONLY BETWEEN 9 AM - 10 PM
