@@ -3,6 +3,7 @@ import time
 from bs4 import BeautifulSoup
 import json
 from io import BytesIO
+from datetime import datetime
 
 BOT_TOKEN = "8278630418:AAG3g7XDj71c55MbXitY2W-sM4GXGZDmd4g"
 CHAT_ID = "855908755"
@@ -43,7 +44,7 @@ def send_telegram(product, alert_type):
         requests.post(url, data=data)
 
 
-# ✅ LOAD OLD DATA
+# LOAD OLD DATA
 try:
     with open("data.json", "r") as f:
         old_data = json.load(f)
@@ -53,91 +54,107 @@ except:
 first_run = True
 
 while True:
-    print("Checking...")
+    now = datetime.now()
+    current_hour = now.hour
 
-    headers = {
-        "User-Agent": "Mozilla/5.0"
-    }
+    # RUN ONLY BETWEEN 9 AM - 10 PM
+    if 9 <= current_hour < 22:
+        print("Checking...")
 
-    response = requests.get(URL, headers=headers)
-    soup = BeautifulSoup(response.text, "html.parser")
+        headers = {
+            "User-Agent": "Mozilla/5.0"
+        }
 
-    cards = soup.select("a[href*='/product/']")
+        response = requests.get(URL, headers=headers)
+        soup = BeautifulSoup(response.text, "html.parser")
 
-    new_data = {}
+        cards = soup.select("a[href*='/product/']")
 
-    for card in cards:
-        try:
-            parent = card.parent
+        new_data = {}
 
-            link = card.get("href")
-            if not link.startswith("http"):
-                link = "https://www.karzanddolls.com" + link
+        for card in cards:
+            try:
+                parent = card.parent
 
-            name = link.split("/product/mini-gt/")[1].split("/")[0].replace("-", " ").upper()
+                # LINK
+                link = card.get("href")
+                if not link.startswith("http"):
+                    link = "https://www.karzanddolls.com" + link
 
-            text = parent.get_text("\n")
-            lines = [l.strip() for l in text.split("\n") if l.strip()]
+                # NAME
+                name = link.split("/product/mini-gt/")[1].split("/")[0].replace("-", " ").upper()
 
-            price = None
-            for line in lines:
-                if "rs." in line.lower() or "₹" in line:
-                    price = line
-                    break
+                # PRICE
+                text = parent.get_text("\n")
+                lines = [l.strip() for l in text.split("\n") if l.strip()]
 
-            qty_element = parent.select_one(".add-top-size li[data-qty]")
+                price = None
+                for line in lines:
+                    if "rs." in line.lower() or "₹" in line:
+                        price = line
+                        break
 
-            quantity = None
-            stock = False
+                # QUANTITY
+                qty_element = parent.select_one(".add-top-size li[data-qty]")
 
-            if qty_element:
-                qty_str = qty_element.get("data-qty")
-                if qty_str:
-                    quantity = int(qty_str)
-                    stock = quantity > 0
+                quantity = None
+                stock = False
 
-            img_tag = parent.select_one("img")
+                if qty_element:
+                    qty_str = qty_element.get("data-qty")
+                    if qty_str:
+                        quantity = int(qty_str)
+                        stock = quantity > 0
 
-            image = None
-            if img_tag:
-                image = img_tag.get("src") or img_tag.get("data-src")
+                # IMAGE
+                img_tag = parent.select_one("img")
 
-            if image and image.startswith("/"):
-                image = "https://www.karzanddolls.com" + image
+                image = None
+                if img_tag:
+                    image = img_tag.get("src") or img_tag.get("data-src")
 
-            product = {
-                "name": name,
-                "price": price,
-                "quantity": quantity,
-                "in_stock": stock,
-                "link": link,
-                "image": image
-            }
+                if image and image.startswith("/"):
+                    image = "https://www.karzanddolls.com" + image
 
-            new_data[name] = product
+                # PRODUCT OBJECT
+                product = {
+                    "name": name,
+                    "price": price,
+                    "quantity": quantity,
+                    "in_stock": stock,
+                    "link": link,
+                    "image": image
+                }
 
-            # 🧠 FIRST RUN (DON'T SEND ANYTHING)
-            if not old_data:
-                pass
+                new_data[name] = product
 
-            # 🆕 NEW PRODUCT
-            elif name not in old_data:
-                send_telegram(product, "NEW LISTING")
+                # FIRST RUN → DON'T SEND
+                if first_run:
+                    pass
 
-            # 🔥 RESTOCK
-            elif old_data[name]["in_stock"] == False and stock == True:
-                send_telegram(product, "RESTOCK")
+                # NEW PRODUCT
+                elif name not in old_data:
+                    send_telegram(product, "NEW LISTING")
 
-        except:
-            continue
+                # RESTOCK
+                elif old_data[name]["in_stock"] == False and stock == True:
+                    send_telegram(product, "RESTOCK")
 
-    old_data = new_data
+            except:
+                continue
 
-    # ✅ After first cycle, allow alerts
-    if first_run:
-        first_run = False
+        old_data = new_data
 
-    with open("data.json", "w") as f:
-        json.dump(old_data, f)
+        # SAVE DATA (optional on Railway)
+        with open("data.json", "w") as f:
+            json.dump(old_data, f)
 
-    time.sleep(15)
+        # After first cycle
+        if first_run:
+            first_run = False
+
+        time.sleep(30)  # faster checking during active hours
+
+    else:
+        print("Sleeping... outside active hours")
+        time.sleep(60)
