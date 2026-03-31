@@ -85,8 +85,12 @@ while True:
                     if not link.startswith("http"):
                         link = "https://www.karzanddolls.com" + link
 
-                    name = link.split("/product/mini-gt/")[1].split("/")[0].replace("-", " ").upper()
+                    try:
+                        name = link.split("/product/")[1].split("/")[1]
+                    except:
+                        name = link.split("/")[-2]
 
+                    name = name.replace("-", " ").upper()
                     text = parent.get_text("\n")
                     lines = [l.strip() for l in text.split("\n") if l.strip()]
 
@@ -117,7 +121,7 @@ while True:
                         image = "https://www.karzanddolls.com" + image
 
                     # 🔥 UNIQUE KEY (important for multiple links)
-                    key = name + "_" + link
+                    key = link
 
                     product = {
                         "name": name,
