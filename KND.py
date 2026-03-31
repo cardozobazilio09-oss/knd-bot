@@ -137,19 +137,23 @@ while True:
 
                     new_data[key] = product
 
+                    # FIRST RUN → DO NOTHING
                     if first_run:
                         pass
 
+                    # NEW PRODUCT
                     elif key not in old_data:
                         send_telegram(product, "NEW LISTING")
 
-                    elif old_data[key]["in_stock"] == False and stock == True:
+                    # RESTOCK
+                    elif old_data.get(key) and old_data[key]["in_stock"] == False and stock == True:
                         send_telegram(product, "RESTOCK")
 
                 except:
                     continue
 
-        old_data = new_data
+        for key, product in new_data.items():
+            old_data[key] = product
 
         with open("data.json", "w") as f:
             json.dump(old_data, f)
