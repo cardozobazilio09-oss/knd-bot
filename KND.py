@@ -73,6 +73,9 @@ while True:
 
             headers = {"User-Agent": "Mozilla/5.0"}
             response = requests.get(URL, headers=headers, timeout=10)
+            if response.status_code != 200:
+                print("Failed:", URL)
+                continue
             soup = BeautifulSoup(response.text, "html.parser")
 
             cards = soup.select("a[href*='/product/']")
