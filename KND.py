@@ -9,11 +9,7 @@ import pytz
 BOT_TOKEN = "8278630418:AAG3g7XDj71c55MbXitY2W-sM4GXGZDmd4g"
 CHAT_ID = "855908755"
 
-URLS = [
-    "https://www.karzanddolls.com/details/mini+gt+/mini-gt/MTY1",
-    "https://www.karzanddolls.com/details/hot+wheels/mainlines/MTEw",
-    "https://www.karzanddolls.com/details/hot+wheels/car-culture/MTEx"
-]
+URL = "https://www.karzanddolls.com/details/mini+gt+/mini-gt/MTY1"
 
 
 def send_telegram(product, alert_type):
@@ -39,7 +35,7 @@ def send_telegram(product, alert_type):
 
                 requests.post(url, data=data, files=files)
             else:
-                raise Exception("Image failed")
+                raise Exception("Image download failed")
         else:
             raise Exception("No image")
 
@@ -63,105 +59,103 @@ while True:
     now = datetime.now(ist)
     current_hour = now.hour
 
+    # RUN ONLY BETWEEN 9 AM - 10 PM
     if 9 <= current_hour < 22:
-        print("Checking all URLs...")
+        print("Checking...")
+
+        headers = {
+            "User-Agent": "Mozilla/5.0"
+        }
+
+        response = requests.get(URL, headers=headers)
+        soup = BeautifulSoup(response.text, "html.parser")
+
+        cards = soup.select("a[href*='/product/']")
 
         new_data = {}
 
-        for URL in URLS:
-            print("Checking:", URL)
+        for card in cards:
+            try:
+                parent = card.parent
 
-            headers = {"User-Agent": "Mozilla/5.0"}
-            response = requests.get(URL, headers=headers, timeout=10)
-            if response.status_code != 200:
-                print("Failed:", URL)
+                # LINK
+                link = card.get("href")
+                if not link.startswith("http"):
+                    link = "https://www.karzanddolls.com" + link
+
+                # NAME
+                name = link.split("/product/mini-gt/")[1].split("/")[0].replace("-", " ").upper()
+
+                # PRICE
+                text = parent.get_text("\n")
+                lines = [l.strip() for l in text.split("\n") if l.strip()]
+
+                price = None
+                for line in lines:
+                    if "rs." in line.lower() or "₹" in line:
+                        price = line
+                        break
+
+                # QUANTITY
+                qty_element = parent.select_one(".add-top-size li[data-qty]")
+
+                quantity = None
+                stock = False
+
+                if qty_element:
+                    qty_str = qty_element.get("data-qty")
+                    if qty_str:
+                        quantity = int(qty_str)
+                        stock = quantity > 0
+
+                # IMAGE
+                img_tag = parent.select_one("img")
+
+                image = None
+                if img_tag:
+                    image = img_tag.get("src") or img_tag.get("data-src")
+
+                if image and image.startswith("/"):
+                    image = "https://www.karzanddolls.com" + image
+
+                # PRODUCT OBJECT
+                product = {
+                    "name": name,
+                    "price": price,
+                    "quantity": quantity,
+                    "in_stock": stock,
+                    "link": link,
+                    "image": image
+                }
+
+                new_data[name] = product
+
+                # FIRST RUN → DON'T SEND
+                if first_run:
+                    pass
+
+                # NEW PRODUCT
+                elif name not in old_data:
+                    send_telegram(product, "NEW LISTING")
+
+                # RESTOCK
+                elif old_data[name]["in_stock"] == False and stock == True:
+                    send_telegram(product, "RESTOCK")
+
+            except:
                 continue
-            soup = BeautifulSoup(response.text, "html.parser")
 
-            cards = soup.select("a[href*='/product/']")
+        old_data = new_data
 
-            for card in cards:
-                try:
-                    parent = card.parent
-
-                    link = card.get("href")
-                    if not link.startswith("http"):
-                        link = "https://www.karzanddolls.com" + link
-
-                    try:
-                        name = link.split("/product/")[1].split("/")[1]
-                    except:
-                        name = link.split("/")[-2]
-
-                    name = name.replace("-", " ").upper()
-                    text = parent.get_text("\n")
-                    lines = [l.strip() for l in text.split("\n") if l.strip()]
-
-                    price = None
-                    for line in lines:
-                        if "rs." in line.lower() or "₹" in line:
-                            price = line
-                            break
-
-                    qty_element = parent.select_one(".add-top-size li[data-qty]")
-
-                    quantity = None
-                    stock = False
-
-                    if qty_element:
-                        qty_str = qty_element.get("data-qty")
-                        if qty_str:
-                            quantity = int(qty_str)
-                            stock = quantity > 0
-
-                    img_tag = parent.select_one("img")
-
-                    image = None
-                    if img_tag:
-                        image = img_tag.get("src") or img_tag.get("data-src")
-
-                    if image and image.startswith("/"):
-                        image = "https://www.karzanddolls.com" + image
-
-                    # 🔥 UNIQUE KEY (important for multiple links)
-                    key = link
-
-                    product = {
-                        "name": name,
-                        "price": price,
-                        "quantity": quantity,
-                        "in_stock": stock,
-                        "link": link,
-                        "image": image
-                    }
-
-                    new_data[key] = product
-
-                    # FIRST RUN → DO NOTHING
-                    if first_run:
-                        pass
-
-                    # NEW PRODUCT
-                    elif key not in old_data:
-                        send_telegram(product, "NEW LISTING")
-
-                    # RESTOCK
-                    elif old_data.get(key) and old_data[key]["in_stock"] == False and stock == True:
-                        send_telegram(product, "RESTOCK")
-
-                except:
-                    continue
-
-        for key, product in new_data.items():
-            old_data[key] = product
-
+        # SAVE DATA (optional on Railway)
         with open("data.json", "w") as f:
             json.dump(old_data, f)
 
+        # After first cycle
         if first_run:
             first_run = False
 
-        time.sleep(10)
+        time.sleep(30)  # faster checking during active hours
 
     else:
         print("Sleeping... outside active hours")
